@@ -342,8 +342,8 @@ def logical_to_pwm_with_offset_arrow(
 
     return wrap_joints_and_values(
         joints,
-        pa.add(
-            pa.subtract(pwm_values.field("values"), base.field("values")),
+        pc.add(
+            pc.subtract(pwm_values.field("values"), base.field("values")),
             pwm_ranged_goal.field("values"),
         ),
     )
