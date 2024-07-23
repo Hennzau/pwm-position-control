@@ -87,9 +87,15 @@ def pwm_to_logical_numpy(
             np.float32,
         )
     else:
+        base = logical_to_pwm_numpy(
+            pwm_to_logical_numpy(pwm_values, joints, table), joints, table
+        )
+        offset = (pwm_values - base) * 360 / 4096
+
         return np.array(
             [
-                table[joints[i]]["pwm_to_logical"]((pwm_values[i] * 360 / 4096))
+                table[joints[i]]["pwm_to_logical"]((pwm_values[i] * 360 / 4096) % 360)
+                - offset[i]
                 for i in range(len(joints))
             ],
             np.float32,
@@ -132,13 +138,21 @@ def pwm_to_logical_arrow(
             ),
         )
     else:
+        base = logical_to_pwm_arrow(pwm_to_logical_arrow(pwm_values, table), table)
+        offset = pc.subtract(pwm_values.field("values"), base.field("values"))
+
+        offset = pc.multiply(
+            offset, pa.array([360 / 4096] * len(offset), type=pa.float32())
+        )
+
         return wrap_joints_and_values(
             joints,
             pa.array(
                 [
                     table[joints[i].as_py()]["pwm_to_logical"](
-                        (positions[i].as_py() * 360 / 4096)
+                        (positions[i].as_py() * 360 / 4096) % 360
                     )
+                    - offset[i].as_py()
                     for i in range(len(joints))
                 ],
                 type=pa.float32(),

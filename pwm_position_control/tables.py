@@ -91,7 +91,7 @@ def construct_pwm_to_logical_conversion_table_arrow(
 
     result: {str: {str: int}} = {}
 
-    for i in range(len(positions[0])):
+    for i in range(len(positions[0].field("values"))):
         table: {str: int} = {}
 
         first, second = (
@@ -141,13 +141,13 @@ def construct_pwm_to_logical_conversion_table_arrow(
     return result
 
 
-def build_logical_to_pwm_conversion_table_numpy(
+def construct_logical_to_pwm_conversion_table_numpy(
     positions: (np.ndarray, np.ndarray),
     joints: list[str],
     targets: (np.ndarray, np.ndarray),
 ) -> {str: {str: int}}:
     """
-    Builds a conversion table from logical values to PWM positions using numpy.
+    Constructs a conversion table from logical values to PWM positions using numpy.
 
     :param positions: A tuple of two numpy arrays representing the positions.
     :type positions: (np.ndarray, np.ndarray)
@@ -202,12 +202,12 @@ def build_logical_to_pwm_conversion_table_numpy(
     return result
 
 
-def build_logical_to_pwm_conversion_table_arrow(
+def construct_logical_to_pwm_conversion_table_arrow(
     positions: (pa.StructArray, pa.StructArray),
     targets: (pa.StructArray, pa.StructArray),
 ) -> {str: {str: int}}:
     """
-    Builds a conversion table from logical values to PWM positions using pyarrow.
+    Constructs a conversion table from logical values to PWM positions using pyarrow.
 
     :param positions: A tuple of two pyarrow structured arrays representing the positions.
     :type positions: (pa.StructArray, pa.StructArray)
@@ -241,7 +241,7 @@ def build_logical_to_pwm_conversion_table_arrow(
         table[str(target_second)] = second
 
         for j in range(5):
-            index = j * 90
+            index = j * 90 - 180
 
             if index != target_first and index != target_second:
                 if target_first < target_second:
