@@ -24,6 +24,8 @@ def wrap_joints_and_values(
              - "values": An Int32Array containing the values corresponding to the joints.
     :rtype: pa.StructArray
 
+    :raises ValueError: If lengths of joints and values do not match.
+
     Example:
     --------
     joints = ["shoulder_pan", "shoulder_lift", "elbow_flex"]
@@ -39,13 +41,27 @@ def wrap_joints_and_values(
 
     This example broadcasts the single integer value to all joints and wraps them into a structured array.
     """
+
     if isinstance(values, int):
         values = [values] * len(joints)
 
+    if len(joints) != len(values):
+        raise ValueError("joints and values must have the same length")
+
+    mask = pa.array([False] * len(values), type=pa.bool_())
+
+    if isinstance(values, list):
+        mask = pa.array([value is None for value in values])
+
+    if isinstance(values, np.ndarray):
+        mask = pa.array([value is None for value in values])
+
+    if isinstance(values, pa.Array):
+        mask = values.is_null()
+
     return pa.StructArray.from_arrays(
-        arrays=[joints, values],
-        names=["joints", "values"],
-    )
+        arrays=[joints, values], names=["joints", "values"], mask=mask
+    ).drop_null()
 
 
 def pwm_to_logical_numpy(
