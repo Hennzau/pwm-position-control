@@ -48,81 +48,112 @@ def wrap_joints_and_values(
     )
 
 
-def physical_to_ranged_logical_numpy(
-    physical_values: np.ndarray,
+def pwm_to_logical_numpy(
+    pwm_values: np.ndarray,
     joints: list[str],
     table: {str: {str: Callable[[float], float]}},
+    ranged=True,
 ) -> np.ndarray:
     """
-    Converts physical values to ranged logical values using numpy.
+    Converts pwm values to ranged logical values using numpy.
 
-    :param physical_values: A numpy array of physical values to be converted.
-    :type physical_values: np.ndarray
-    :param joints: A list of joint names corresponding to the physical values.
+    :param pwm_values: A numpy array of pwm values to be converted.
+    :type pwm_values: np.ndarray
+    :param joints: A list of joint names corresponding to the pwm values.
     :type joints: list[str]
     :param table: A dictionary containing conversion functions for each joint.
     :type table: {str: {str: Callable[[float], float]}}
+    :param ranged: A boolean flag to determine if the logical values should be in the range [-180, 180].
+    :type ranged: bool
 
     :return: A numpy array of ranged logical values.
     :rtype: np.ndarray
 
-    :raises ValueError: If physical_values contains None values or if lengths of joints and physical_values do not match.
+    :raises ValueError: If pwm_values contains None values or if lengths of joints and pwm_values do not match.
     """
 
-    if np.any(physical_values == None):
-        raise ValueError("physical_position: np.ndarray cannot contain None values")
+    if np.any(pwm_values == None):
+        raise ValueError("pwm_position: np.ndarray cannot contain None values")
 
-    if len(joints) != len(physical_values):
-        raise ValueError("joints and physical_values must have the same length")
+    if len(joints) != len(pwm_values):
+        raise ValueError("joints and pwm_values must have the same length")
 
-    return np.array(
-        [
-            table[joints[i]]["physical_to_logical"](physical_values[i] * 360 / 4096)
-            for i in range(len(joints))
-        ],
-        np.float32,
-    )
+    if ranged:
+        return np.array(
+            [
+                table[joints[i]]["pwm_to_logical"]((pwm_values[i] * 360 / 4096) % 360)
+                for i in range(len(joints))
+            ],
+            np.float32,
+        )
+    else:
+        return np.array(
+            [
+                table[joints[i]]["pwm_to_logical"]((pwm_values[i] * 360 / 4096))
+                for i in range(len(joints))
+            ],
+            np.float32,
+        )
 
 
-def physical_to_ranged_logical_arrow(
-    physical_values: pa.StructArray, table: {str: {str: Callable[[float], float]}}
+def pwm_to_logical_arrow(
+    pwm_values: pa.StructArray,
+    table: {str: {str: Callable[[float], float]}},
+    ranged=True,
 ) -> pa.StructArray:
     """
-    Converts physical values to ranged logical values using pyarrow.
+    Converts pwm values to ranged logical values using pyarrow.
 
-    :param physical_values: A structured array containing the physical values to be converted.
-    :type physical_values: pa.StructArray
+    :param pwm_values: A structured array containing the pwm values to be converted.
+    :type pwm_values: pa.StructArray
     :param table: A dictionary containing conversion functions for each joint.
     :type table: {str: {str: Callable[[float], float]}}
+    :param ranged: A boolean flag to determine if the logical values should be in the range [-180, 180].
+    :type ranged: bool
 
     :return: A structured array with joints and their corresponding ranged logical values.
     :rtype: pa.StructArray
     """
 
-    joints = physical_values.field("joints")
-    positions = physical_values.field("values")
+    joints = pwm_values.field("joints")
+    positions = pwm_values.field("values")
 
-    return wrap_joints_and_values(
-        joints,
-        pa.array(
-            [
-                table[joints[i].as_py()]["physical_to_logical"](
-                    positions[i].as_py() * 360 / 4096
-                )
-                for i in range(len(joints))
-            ],
-            type=pa.float32(),
-        ),
-    )
+    if ranged:
+        return wrap_joints_and_values(
+            joints,
+            pa.array(
+                [
+                    table[joints[i].as_py()]["pwm_to_logical"](
+                        (positions[i].as_py() * 360 / 4096) % 360
+                    )
+                    for i in range(len(joints))
+                ],
+                type=pa.float32(),
+            ),
+        )
+    else:
+        return wrap_joints_and_values(
+            joints,
+            pa.array(
+                [
+                    table[joints[i].as_py()]["pwm_to_logical"](
+                        (positions[i].as_py() * 360 / 4096)
+                    )
+                    for i in range(len(joints))
+                ],
+                type=pa.float32(),
+            ),
+        )
 
 
-def logical_to_physical_numpy(
+def logical_to_pwm_numpy(
     logical_values: np.ndarray,
     joints: list[str],
     table: {str: {str: Callable[[float], float]}},
+    ranged: bool = True,
 ) -> np.ndarray:
     """
-    Converts logical values to physical values using numpy.
+    Converts logical values to pwm values using numpy.
 
     :param logical_values: A numpy array of logical values to be converted.
     :type logical_values: np.ndarray
@@ -130,8 +161,10 @@ def logical_to_physical_numpy(
     :type joints: list[str]
     :param table: A dictionary containing conversion functions for each joint.
     :type table: {str: {str: Callable[[float], float]}}
+    :param ranged: A boolean flag to determine if the pwm values should be calculated from the ranged logical values.
+    :type ranged: bool
 
-    :return: A numpy array of physical values.
+    :return: A numpy array of pwm values.
     :rtype: np.ndarray
 
     :raises ValueError: If logical_values contains None values or if lengths of joints and logical_values do not match.
@@ -143,153 +176,115 @@ def logical_to_physical_numpy(
     if len(joints) != len(logical_values):
         raise ValueError("joints and logical_position must have the same length")
 
-    return np.array(
-        [
-            int(table[joints[i]]["logical_to_physical"](logical_values[i]) * 4096 / 360)
-            for i in range(len(joints))
-        ],
-        np.int32,
-    )
-
-
-def logical_to_physical_arrow(
-    logical_values: pa.StructArray, table: {str: {str: Callable[[float], float]}}
-) -> pa.StructArray:
-    """
-    Converts logical values to physical values using pyarrow.
-
-    :param logical_values: A structured array containing the logical values to be converted.
-    :type logical_values: pa.StructArray
-    :param table: A dictionary containing conversion functions for each joint.
-    :type table: {str: {str: Callable[[float], float]}}
-
-    :return: A structured array with joints and their corresponding physical values.
-    :rtype: pa.StructArray
-    """
-
-    joints = logical_values.field("joints")
-    positions = logical_values.field("values")
-
-    return wrap_joints_and_values(
-        joints,
-        pa.array(
+    if ranged:
+        return np.array(
             [
                 int(
-                    table[joints[i].as_py()]["logical_to_physical"](
-                        positions[i].as_py()
+                    table[joints[i]]["logical_to_pwm"](
+                        (logical_values[i] + 180) % 360 - 180
                     )
                     * 4096
                     / 360
                 )
                 for i in range(len(joints))
             ],
-            type=pa.int32(),
-        ),
-    )
+            np.int32,
+        )
+    else:
+        return np.array(
+            [
+                int(table[joints[i]]["logical_to_pwm"](logical_values[i]) * 4096 / 360)
+                for i in range(len(joints))
+            ],
+            np.int32,
+        )
 
 
-def physical_to_un_ranged_logical_numpy(
-    physical_values: np.ndarray,
-    joints: list[str],
+def logical_to_pwm_arrow(
+    logical_values: pa.StructArray,
     table: {str: {str: Callable[[float], float]}},
-) -> np.ndarray:
-    """
-    Converts physical values to un ranged logical values using numpy.
-
-    :param physical_values: A numpy array of physical values to be converted.
-    :type physical_values: np.ndarray
-    :param joints: A list of joint names corresponding to the physical values.
-    :type joints: list[str]
-    :param table: A dictionary containing conversion functions for each joint.
-    :type table: {str: {str: Callable[[float], float]}}
-
-    :return: A numpy array of un ranged logical values.
-    :rtype: np.ndarray
-
-    :raises ValueError: If physical_values contains None values or if lengths of joints and physical_values do not match.
-    """
-
-    if np.any(physical_values == None):
-        raise ValueError("physical_position: np.ndarray cannot contain None values")
-
-    if len(joints) != len(physical_values):
-        raise ValueError("joints and physical_values must have the same length")
-
-    base = logical_to_physical_numpy(
-        physical_to_ranged_logical_numpy(physical_values, joints, table), joints, table
-    )
-
-    offset = np.array((physical_values - base) * 360 / 4096, dtype=np.float32)
-
-    logical = physical_to_ranged_logical_numpy(physical_values, joints, table)
-
-    return logical - offset
-
-
-def physical_to_un_ranged_logical_arrow(
-    physical_values: pa.StructArray, table: {str: {str: Callable[[float], float]}}
+    ranged=True,
 ) -> pa.StructArray:
     """
-    Converts physical values to un ranged logical values using pyarrow.
+    Converts logical values to pwm values using pyarrow.
 
-    :param physical_values: A structured array containing the physical values to be converted.
-    :type physical_values: pa.StructArray
+    :param logical_values: A structured array containing the logical values to be converted.
+    :type logical_values: pa.StructArray
     :param table: A dictionary containing conversion functions for each joint.
     :type table: {str: {str: Callable[[float], float]}}
+    :param ranged: A boolean flag to determine if the pwm values should be calculated from the ranged logical values.
+    :type ranged: bool
 
-    :return: A structured array with joints and their corresponding un ranged logical values.
+    :return: A structured array with joints and their corresponding pwm values.
     :rtype: pa.StructArray
     """
 
-    joints = physical_values.field("joints")
-    positions = physical_values.field("values")
+    joints = logical_values.field("joints")
+    positions = logical_values.field("values")
 
-    base = logical_to_physical_arrow(
-        physical_to_ranged_logical_arrow(physical_values, table), table
-    )
+    if ranged:
+        return wrap_joints_and_values(
+            joints,
+            pa.array(
+                [
+                    int(
+                        table[joints[i].as_py()]["logical_to_pwm"](
+                            (positions[i].as_py() + 180) % 360 - 180
+                        )
+                        * 4096
+                        / 360
+                    )
+                    for i in range(len(joints))
+                ],
+                type=pa.int32(),
+            ),
+        )
+    else:
+        return wrap_joints_and_values(
+            joints,
+            pa.array(
+                [
+                    int(
+                        table[joints[i].as_py()]["logical_to_pwm"](positions[i].as_py())
+                        * 4096
+                        / 360
+                    )
+                    for i in range(len(joints))
+                ],
+                type=pa.int32(),
+            ),
+        )
 
-    offset = pa.multiply(
-        pa.subtract(positions, base.field("values")),
-        pa.array([360 / 4096] * len(joints), type=pa.float32()),
-    )
 
-    logical = physical_to_ranged_logical_arrow(physical_values, table)
-
-    return wrap_joints_and_values(
-        joints,
-        pa.subtract(logical.field("values"), offset),
-    )
-
-
-def logical_to_physical_with_offset_numpy(
-    physical_values: np.ndarray,
+def logical_to_pwm_with_offset_numpy(
+    pwm_values: np.ndarray,
     logical_values: np.ndarray,
     joints: list[str],
     table: {str: {str: Callable[[float], float]}},
 ) -> np.ndarray:
     """
-    Converts logical values to physical values with an offset using numpy.
+    Converts logical values to pwm values with an offset using numpy.
 
-    :param physical_values: A numpy array of current physical values.
-    :type physical_values: np.ndarray
+    :param pwm_values: A numpy array of current pwm values.
+    :type pwm_values: np.ndarray
     :param logical_values: A numpy array of target logical values.
     :type logical_values: np.ndarray
-    :param joints: A list of joint names corresponding to the physical and logical values.
+    :param joints: A list of joint names corresponding to the pwm and logical values.
     :type joints: list[str]
     :param table: A dictionary containing conversion functions for each joint.
     :type table: {str: {str: Callable[[float], float]}}
 
-    :return: A numpy array of physical values adjusted with the offset.
+    :return: A numpy array of pwm values adjusted with the offset.
     :rtype: np.ndarray
 
-    :raises ValueError: If physical_values or logical_values contain None values or if lengths of joints and values do not match.
+    :raises ValueError: If pwm_values or logical_values contain None values or if lengths of joints and values do not match.
     """
 
-    if np.any(physical_values == None):
-        raise ValueError("physical_position: np.ndarray cannot contain None values")
+    if np.any(pwm_values == None):
+        raise ValueError("pwm_position: np.ndarray cannot contain None values")
 
-    if len(joints) != len(physical_values):
-        raise ValueError("joints and physical_values must have the same length")
+    if len(joints) != len(pwm_values):
+        raise ValueError("joints and pwm_values must have the same length")
 
     if np.any(logical_values == None):
         raise ValueError("logical_position: np.ndarray cannot contain None values")
@@ -297,46 +292,44 @@ def logical_to_physical_with_offset_numpy(
     if len(joints) != len(logical_values):
         raise ValueError("joints and logical_position must have the same length")
 
-    physical_ranged_goal = logical_to_physical_numpy(logical_values, joints, table)
-    base = logical_to_physical_numpy(
-        physical_to_un_ranged_logical_numpy(physical_values, joints, table),
+    pwm_ranged_goal = logical_to_pwm_numpy(logical_values, joints, table)
+    base = logical_to_pwm_numpy(
+        pwm_to_logical_numpy(pwm_values, joints, table),
         joints,
         table,
     )
 
-    return physical_values - base + physical_ranged_goal
+    return pwm_values - base + pwm_ranged_goal
 
 
-def logical_to_physical_with_offset_arrow(
-    physical_values: pa.StructArray,
+def logical_to_pwm_with_offset_arrow(
+    pwm_values: pa.StructArray,
     logical_values: pa.StructArray,
     table: {str: {str: Callable[[float], float]}},
 ) -> pa.StructArray:
     """
-    Converts logical values to physical values with an offset using pyarrow.
+    Converts logical values to pwm values with an offset using pyarrow.
 
-    :param physical_values: A structured array containing the current physical values.
-    :type physical_values: pa.StructArray
+    :param pwm_values: A structured array containing the current pwm values.
+    :type pwm_values: pa.StructArray
     :param logical_values: A structured array containing the target logical values.
     :type logical_values: pa.StructArray
     :param table: A dictionary containing conversion functions for each joint.
     :type table: {str: {str: Callable[[float], float]}}
 
-    :return: A structured array with joints and their corresponding physical values adjusted with the offset.
+    :return: A structured array with joints and their corresponding pwm values adjusted with the offset.
     :rtype: pa.StructArray
     """
 
-    joints = physical_values.field("joints")
+    joints = pwm_values.field("joints")
 
-    physical_ranged_goal = logical_to_physical_arrow(logical_values, table)
-    base = logical_to_physical_arrow(
-        physical_to_un_ranged_logical_arrow(physical_values, table), table
-    )
+    pwm_ranged_goal = logical_to_pwm_arrow(logical_values, table)
+    base = logical_to_pwm_arrow(pwm_to_logical_arrow(pwm_values, table), table)
 
     return wrap_joints_and_values(
         joints,
         pa.add(
-            pa.subtract(physical_values.field("values"), base.field("values")),
-            physical_ranged_goal.field("values"),
+            pa.subtract(pwm_values.field("values"), base.field("values")),
+            pwm_ranged_goal.field("values"),
         ),
     )
